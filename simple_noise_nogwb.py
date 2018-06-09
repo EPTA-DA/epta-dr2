@@ -1,13 +1,12 @@
 
 # coding: utf-8
 
-# In[26]:
+# In[ ]:
 
 
 from __future__ import division
 import numpy as np
 import glob
-import matplotlib.pyplot as plt
 import cPickle as pickle
 import scipy.linalg as sl
 import scipy.special as ss
@@ -23,18 +22,16 @@ from enterprise.signals import deterministic_signals
 import enterprise.constants as const
 from enterprise.signals import utils
 
+import libstempo as t2
+
 from PTMCMCSampler.PTMCMCSampler import PTSampler as ptmcmc
-from corner import corner, quantile
 import os
 import json
-
-#get_ipython().magic(u'matplotlib inline')
-#get_ipython().magic(u"config InlineBackend.figure_format = 'retina'")
 
 
 # ## Utility functions
 
-# In[2]:
+# In[ ]:
 
 
 class JumpProposal(object):
@@ -127,17 +124,17 @@ def get_parameter_groups(pta):
 
 # ## Read in pulsar data
 
-# In[3]:
+# In[ ]:
 
 
 psr_name = 'J1744-1134'
-psr = Pulsar('../partim_epta_rmaddsatflag/{0}.par'.format(psr_name), '../partim_epta_rmaddsatflag/{0}.tim'.format(psr_name))
+psr = Pulsar('../EPTA_v2.2_git/{0}/{0}.par'.format(psr_name), '../EPTA_v2.2_git/{0}/{0}_all.tim'.format(psr_name))
 
 
-# In[4]:
+# In[ ]:
 
 
-#plt.errorbar(psr.toas/86400, psr.residuals*1e6, psr.toaerrs*1e6, fmt='.')
+
 
 
 # ## Setup model
@@ -146,7 +143,7 @@ psr = Pulsar('../partim_epta_rmaddsatflag/{0}.par'.format(psr_name), '../partim_
 
 # ### 1. Exponential decay function to model "void" in J1713+0747
 
-# In[5]:
+# In[ ]:
 
 
 @signal_base.function
@@ -159,7 +156,7 @@ def exp_decay(toas, freqs, log10_Amp=-7, t0=54000, log10_tau=1.7):
 
 # ### 2. Yearly DM sinusoid
 
-# In[6]:
+# In[ ]:
 
 
 @signal_base.function
@@ -186,7 +183,7 @@ def yearly_sinusoid_prior(f):
 
 # ### 3. DM EQUAD (EQUAD) term that scales like $\nu^{-4}$ (variance remember...)
 
-# In[7]:
+# In[ ]:
 
 
 # define DM EQUAD variance function
@@ -198,7 +195,7 @@ def dmequad_ndiag(freqs, log10_dmequad=-8):
 # ### 4. SVD timing model basis
 # This allows for more stability over standard scaling methods
 
-# In[8]:
+# In[ ]:
 
 
 # SVD timing model basis
@@ -212,14 +209,14 @@ def tm_prior(weights):
     return weights * 10**40
 
 
-# In[9]:
+# In[ ]:
 
 
 # define selection by observing backend
-#selection1 = selections.Selection(selections.by_backend)
+selection1 = selections.Selection(selections.by_backend)
 
 # special selection for ECORR only use wideband NANOGrav data
-#selection2 = selections.Selection(selections.nanograv_backends)
+selection2 = selections.Selection(selections.nanograv_backends)
 
 # white noise parameters
 #efac = parameter.Uniform(0.5, 10.0)
@@ -278,8 +275,8 @@ tm = gp_signals.TimingModel()
 
 # full model
 s = ef + eq + rn + dmgp + tm + dmys
-if 'NANOGrav' in psr.flags['pta']:
-    s += ec
+#if 'NANOGrav' in psr.flags['pta']:
+#    s += ec
 if psr.name == 'J1713+0747':
     s += dmexp
 
@@ -287,13 +284,13 @@ if psr.name == 'J1713+0747':
 pta = signal_base.PTA([s(psr)])
 
 
-# In[10]:
+# In[ ]:
 
 
-pta.param_names
 
 
-# In[12]:
+
+# In[ ]:
 
 
 # dimension of parameter space
@@ -320,14 +317,14 @@ jp = JumpProposal(pta)
 sampler.addProposalToCycle(jp.draw_from_prior, 15)
 
 
-# In[13]:
+# In[ ]:
 
 
 N = 1000000
 sampler.sample(x0, N, SCAMweight=35, AMweight=10, DEweight=50)
 
 
-# In[15]:
+# In[ ]:
 
 
 #chain = np.loadtxt('chains/J1713+0747_standard/chain_1.txt')
@@ -341,7 +338,7 @@ pars = pta.param_names
 #burn2 = int(0.25*chain2.shape[0])
 
 
-# In[35]:
+# In[ ]:
 
 
 def make_noise_files(psrname, chain, pars, outdir='noisefiles/'):
@@ -354,155 +351,10 @@ def make_noise_files(psrname, chain, pars, outdir='noisefiles/'):
         json.dump(x, fout, sort_keys=True, indent=4, separators=(',', ': '))
 
 
-# In[36]:
+# In[ ]:
 
 
 make_noise_files(psrname=psr_name,chain=chain,pars=pars)
-
-
-# In[16]:
-
-
-#def get_dm_model(psr, pta, chain, tm_svd=False):
-    
-#    wave = 0
-    
-#    # get parameter dictionary
-#    ind = np.random.randint(burn, chain.shape[0])
-#    params = {par.name: chain[ind, ct] for ct, par in enumerate(pta.params)}
-    
-#    # deterministic signal part
-#    wave += pta.get_delay(params=params)[0]
-    
-#    # get linear parameters
-#    Nvec = pta.get_ndiag(params)[0]
-#    phiinv = pta.get_phiinv(params, logdet=False)[0]
-#    T = pta.get_basis(params)[0]
-
-#    d = pta.get_TNr(params)[0]
-#    TNT = pta.get_TNT(params)[0]
-
-#    # Red noise piece
-#    Sigma = TNT + np.diag(phiinv)
-
-#    try:
-#        u, s, _ = sl.svd(Sigma)
-#        mn = np.dot(u, np.dot(u.T, d)/s)
-#        Li = u * np.sqrt(1/s)
-#    except np.linalg.LinAlgError:
-#        print 'here'
-#        Q, R = sl.qr(Sigma)
-#        Sigi = sl.solve(R, Q.T)
-#        mn = np.dot(Sigi, d)
-#        u, s, _ = sl.svd(Sigi)
-#        Li = u * np.sqrt(s)
-
-#    b = mn + np.dot(Li, np.random.randn(Li.shape[0]))
-    
-#    # find basis indices
-#    pardict = {}
-#    for sc in pta._signalcollections:
-#        ntot = 0
-#        for sig in sc._signals:
-#            if sig.signal_type == 'basis':
-#                basis = sig.get_basis(params=params)
-#                nb = basis.shape[1]
-#                pardict[sig.signal_name] = np.arange(ntot, nb+ntot)
-#                ntot += nb
-                
-    
-#    # DM quadratic + GP
-#    key = 'linear timing model' if not tm_svd else ''
-#    dmind = np.array([ct for ct, p in enumerate(psr.fitpars) if 'DM' in p])[1:]
-#    idx = np.concatenate((pardict[key][dmind], pardict['dm']))
-    
-#    # coordinate transform
-#    if tm_svd:
-#        u, s, v = np.linalg.svd(psr.Mmat, full_matrices=False)
-#        tmind = pardict[key]
-#        #b[tmind] = np.dot(v/s[:,None], b[tmind])
-#        #T[:, tmind] = psr.Mmat
-#    #wave += np.dot(T[:,idx], b[idx])
-#    wave += np.dot(T[:, pardict['dm']], b[pardict['dm']])
-    
-#    return wave * (psr.freqs**2 * const.DM_K * 1e12) 
-
-
-# In[17]:
-
-
-#N = 100
-#for ii in range(N):
-#    dm = get_dm_model(psr, pta, chain, tm_svd=False)
-#    plt.plot(psr.toas/86400, (dm-dm.mean())*1e6, color='C0', alpha=0.2)
-#for ii in range(N):
-#    dm = get_dm_model(psr, pta, chain2, tm_svd=False)
-#    plt.plot(psr.toas/86400, (dm-dm.mean())*1e6, color='C1', alpha=0.2)
-
-
-# In[18]:
-
-
-#pardict = {}
-#for sc in pta._signalcollections:
-#    ntot = 0
-#    for sig in sc._signals:
-#        if sig.signal_type == 'basis':
-#            basis = sig.get_basis()
-#            nb = basis.shape[1]
-#            pardict[sig.signal_name] = np.arange(ntot, nb+ntot)
-#            ntot += nb
-
-
-# In[19]:
-
-
-#pardict
-
-
-# In[20]:
-
-
-#len(pars)
-
-
-# In[28]:
-
-
-#plt.figure(figsize=(15, 10))
-#for ii in range(22):
-#    plt.subplot(6,5,ii+1)
-#    plt.hist(chain[burn:, ii], 50, normed=True, histtype='step')
-#    #plt.hist(chain2[burn2:, ii], 50, normed=True, histtype='step')
-#    plt.xlabel(pars[ii])
-#plt.tight_layout()
-
-
-# In[ ]:
-
-
-#idx = np.array([ct for ct, p in enumerate(pars) if 'WBCORR_10CM' in p])
-
-
-# In[ ]:
-
-
-#corner(chain2[burn2:, idx], labels=np.array(pars)[idx]);
-
-
-# In[ ]:
-
-
-#uflags = np.unique(psr.backend_flags)
-#uflags = np.unique(psr.flags['group'])
-#for flag in uflags:
-#    print flag, sum(psr.backend_flags == flag)
-
-
-# In[ ]:
-
-
-#sorted(psr.flags.keys())
 
 
 # In[ ]:
